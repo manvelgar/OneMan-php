@@ -321,7 +321,6 @@ class Aliyundrive {
         return output(json_encode($this->files_format(json_decode($result['body'], true))), $result['stat']);
     }
     public function Copy($file) {
-        return output('NO copy', 415);
         if (!$file['id']) {
             $oldfile = $this->list_path($file['path'] . '/' . $file['name']);
             //error_log1('res:' . json_encode($res));
@@ -329,47 +328,60 @@ class Aliyundrive {
         } else {
             $oldfile = $this->fileGet($file['id']);
         }
-
-        $url = $this->api_url . '/file/create';
-
-        $header["content-type"] = "application/json; charset=utf-8";
-        $header['authorization'] = 'Bearer ' . $this->access_token;
-
-        $data['check_name_mode'] = 'auto_rename'; // ignore, auto_rename, refuse.
-        $data['content_hash'] = $oldfile['content_hash'];
-        $data['content_hash_name'] = 'sha1';
-        $data['content_type'] = $oldfile['content_type'];
-        $data['drive_id'] = $this->driveId;
-        $data['ignoreError'] = false;
-        $data['name'] = $oldfile['name'];
-        $data['parent_file_id'] = $oldfile['parent_file_id'];
-        $data['part_info_list'][0]['part_number'] = 1;
-        $data['size'] = $oldfile['size'];
-        $data['type'] = 'file';
-
-        $result = curl('POST', $url, json_encode($data), $header);
-
-        if ($result['stat']==201) {
-            //error_log1('1,url:' . $url .' res:' . json_encode($result));
-            $res = json_decode($result['body'], true);
-            $url = $res['part_info_list'][0]['upload_url'];
-            if (!$url) { // 无url，应该算秒传
-                return output('no up url', 200);
+        if ($oldfile['type']=='folder') return output('Can not copy folder', 415);
+        if (!function_exists('bcadd')) {
+            // no php-bcmath
+            if ($bcmathurl = getConfig('bcmathUrl', $this->disktag)) {
+                if (strpos($bcmathurl, '?')) {
+                    $bcmathurl .= '&dividend=0x' . substr(md5($this->access_token), 0, 16) . '&divisor=' . $oldfile['size'];
+                } else {
+                    $bcmathurl .= '?dividend=0x' . substr(md5($this->access_token), 0, 16) . '&divisor=' . $oldfile['size'];
+                }
+                $o = curl('GET', $bcmathurl)['body'];
             } else {
-                return output(json_encode($this->files_format(json_decode($result['body'], true))), $result['stat']);
+                return output('No bcmath module, can not copy', 415);
             }
-            /*$file_id = $res['file_id'];
-            $upload_id = $res['upload_id'];
-            $result = curl('PUT', $url, $content, [], 1);
-            if ($result['stat']==200) { // 块1传好
-                $etag = $result['returnhead']['ETag'];
-                $result = $this->fileComplete($file_id, $upload_id, [ $etag ]);
-                if ($result['stat']!=200) return output($result['body'], $result['stat']);
-                else return output('success', 0);
-            }*/
+        } else {
+            $r = bchexdec( substr(md5($this->access_token), 0, 16) );
+            $o = bcmod($r, $oldfile['size']);
         }
-        //error_log1('2,url:' . $url .' res:' . json_encode($result));
-        return output(json_encode($this->files_format(json_decode($result['body'], true))), $result['stat']);
+        $res = curl('GET', $oldfile['download_url'], '', [
+            'Referer' => ''
+            , 'Range' => 'bytes=' . $o . '-' . ($o+7)
+        ]);
+        if ($res['stat']==206) {
+            $proof_code = base64_encode($res['body']);
+            $url = 'https://api.aliyundrive.com/adrive/v2/file/createWithFolders';
+            $header["content-type"] = "application/json; charset=utf-8";
+            $header['authorization'] = 'Bearer ' . $this->access_token;
+            $data['check_name_mode'] = 'auto_rename'; // ignore, auto_rename, refuse.
+            $data['content_hash'] = $oldfile['content_hash'];
+            $data['content_hash_name'] = 'sha1';
+            $data['drive_id'] = $this->driveId;
+            $data['name'] = $oldfile['name'];
+            $data['parent_file_id'] = $oldfile['parent_file_id'];
+            $data['part_info_list'][0]['part_number'] = 1;
+            $data['proof_code'] = $proof_code;
+            $data['proof_version'] = 'v1';
+            $data['size'] = $oldfile['size'];
+            $data['type'] = 'file';
+            $result = curl('POST', $url, json_encode($data), $header);
+            /*if ($result['stat']==201) {
+                $res = json_decode($result['body'], true);
+                if ($res['rapid_upload']) return output('rapid upload', 200);
+                $url = $res['part_info_list'][0]['upload_url'];
+                if (!$url) { // 无url，应该算秒传
+                    return output('no up url', 200);
+                } else {
+                    return output(json_encode($this->files_format(json_decode($result['body'], true))), $result['stat']);
+                }
+            }*/
+            //error_log1('2,url:' . $url .' res:' . json_encode($result));
+            return output(json_encode($this->files_format(json_decode($result['body'], true))), $result['stat']);
+        } else {
+            return output("Get proof error\n" . json_encode($res), 415);
+        }
+
     }
     public function Edit($file, $content) {
         $tmp = splitlast($file['path'], '/');
@@ -582,7 +594,6 @@ class Aliyundrive {
                     $i = $_POST['filesize'];
                     //$o = $i ? bcmod($r, $i) : 0;
                     $o = bcmod($r, $i);
-                    //return output(hexdec( substr(md5($this->access_token), 0, 16) ) . ' , ' . $r . ' / ' . $i . ' = ' . $o, 200);
                     return output($o, 200);
                 }*/
             }
