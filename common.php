@@ -345,7 +345,7 @@ function main($path)
             if (strpos($_GET['upbigfilename'], '../')!==false) return output('Not_Allow_Cross_Path', 400);
             if (strpos($_POST['upbigfilename'], '../')!==false) return output('Not_Allow_Cross_Path', 400);
         }
-        return smallfileupload($path);
+        return smallfileupload($drive, $path);
         /*if ($_FILES['file1']['error']) return output($_FILES['file1']['error'], 400);
         if ($_FILES['file1']['size']>4*1024*1024) return output('File too large', 400);
         return $drive->smallfileupload($path, $_FILES['file1']);*/

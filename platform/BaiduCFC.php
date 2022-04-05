@@ -486,6 +486,6 @@ function changeAuthKey() {
     return message($html, 'Change platform Auth token or key', 200);
 }
 
-function smallfileupload($path) {
+function smallfileupload($drive, $path) {
     return output('Can not upload through CFC.', 400);
 }
