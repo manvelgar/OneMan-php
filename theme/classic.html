@@ -665,7 +665,7 @@
         disableAutoFetch: true,
         rangeChunkSize: 65535
     });
-    loadingTask.onProgress = (e) => {
+    /*loadingTask.onProgress = (e) => {
         //console.log(e);
         var p = document.getElementById('p');
         if (p==null) {
@@ -679,7 +679,7 @@
         p.style.display = '';
         if (e.loaded==e.total) p.style.display = 'none';
         
-    }
+    }*/
     loadingTask.promise.then(function(pdf) {
         var pagenum =  pdf.numPages;
         var pdfContainer = document.getElementById('pdf-d');
