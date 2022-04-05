@@ -576,6 +576,60 @@ class Aliyundrive {
         $thumb_url = $res['thumbnail'];
         return $thumb_url;
     }
+    public function smallfileupload($path, $tmpfile) {
+        if (!$_SERVER['admin']) {
+            $tmp1 = splitlast($tmpfile['name'], '.');
+            if ($tmp1[0]==''||$tmp1[1]=='') $filename = sha1_file($tmpfile['tmp_name']);
+            else $filename = sha1_file($tmpfile['tmp_name']) . '.' . $tmp1[1];
+        } else {
+            $filename = $tmpfile['name'];
+        }
+        //$content = file_get_contents($tmpfile['tmp_name']);
+        $result = $this->tmpfileCreate($this->list_path($_SERVER['list_path'] . '/' . $path . '/')['file_id'], $tmpfile['tmp_name'], $filename);
+        //error_log1('1,url:' . $url .' res:' . json_encode($result));
+        if ($result['stat']==201) {
+            $res = json_decode($result['body'], true);
+            $url = $res['part_info_list'][0]['upload_url'];
+            if (!$url) { // 无url，应该算秒传
+                //return output('no up url', 0);
+                $a = 1;
+            } else {
+                $file_id = $res['file_id'];
+                $upload_id = $res['upload_id'];
+                //$result = curl('PUT', $url, $content, [], 1);
+                $ch = curl_init();
+                curl_setopt($ch, CURLOPT_URL, $url);
+                curl_setopt($ch, CURLOPT_PUT, 1);
+                curl_setopt($ch, CURLOPT_HEADER, 1);
+                $fh_res = fopen($tmpfile['tmp_name'], 'r');
+                curl_setopt($ch, CURLOPT_INFILE, $fh_res);
+                curl_setopt($ch, CURLOPT_INFILESIZE, filesize($tmpfile['tmp_name']));
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+                $tmpres = splitlast(curl_exec($ch), "\r\n\r\n");
+                $result['body'] = $tmpres[1];
+                $returnhead = $tmpres[0];
+                foreach (explode("\r\n", $returnhead) as $head) {
+                    $tmp = explode(': ', $head);
+                    $heads[$tmp[0]] = $tmp[1];
+                }
+                $result['returnhead'] = $heads;
+                $result['stat'] = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                fclose($fh_res);
+                curl_close($ch);
+                //error_log1('2,url:' . $url .' res:' . json_encode($result));
+                if ($result['stat']==200) { // 块1传好
+                    $result = $this->fileComplete($file_id, $upload_id, [ $result['returnhead']['ETag'] ]);
+                    //error_log1('3, res:' . json_encode($result));
+                    //if ($result['stat']!=200) return output(json_encode($this->files_format(json_decode($result['body'], true))), $result['stat']);
+                    //else return output('success', 0);
+                }
+            }
+            $res = json_decode($result['body'], true);
+            //if (isset($res['url'])) 
+            $res['download_url'] = $_SERVER['host'] . path_format($_SERVER['base_disk_path'] . '/' . $path . '/' . $filename);
+        }
+        return output(json_encode($this->files_format($res), JSON_UNESCAPED_SLASHES), $result['stat']);
+    }
     public function bigfileupload($path)
     {
         if (isset($_POST['uploadid'])) {
